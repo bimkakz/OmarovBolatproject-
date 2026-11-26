@@ -6,3 +6,6 @@ node_modules
 test-ledger
 .yarn
 devnet-pool.json
+app/.env.local
+app/dist/
+app/*.tsbuildinfo
