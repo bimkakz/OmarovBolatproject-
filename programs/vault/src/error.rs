@@ -8,4 +8,10 @@ pub enum VaultError {
     SharesTooSmall,
     #[msg("Math overflow occurred")]
     MathOverflow,
+    #[msg("Vault has no shares")]
+    VaultEmpty,
+    #[msg("Calculated tokens amount is too small (evaluated to zero)")]
+    WithdrawTooSmall,
+    #[msg("User card has insufficient shares recorded")]
+    InsufficientCardShares,
 }

@@ -388,4 +388,202 @@ describe("vault", () => {
     );
     expect(Number(vaultTokenAccount.amount)).to.equal(150);
   });
+
+  // Week 10 tests
+  it("withdraw с суммой 0 — ошибка", async () => {
+    const [userACardPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_card"), vaultStatePda.toBuffer(), userA.publicKey.toBuffer()],
+      program.programId
+    );
+
+    try {
+      await program.methods
+        .withdraw(new anchor.BN(0))
+        .accounts({
+          user: userA.publicKey,
+          vaultState: vaultStatePda,
+          userCard: userACardPda,
+          userTokenAccount: userATokenAccount,
+          vaultTokenAccount: vaultTokenAccountPda,
+          shareMint: shareMintPda,
+          userShareAccount: userAShareAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([userA])
+        .rpc();
+      assert.fail("Ожидалась ошибка ZeroAmount при shares_amount = 0");
+    } catch (err: any) {
+      expect(err).to.exist;
+      expect(err.toString()).to.include("ZeroAmount");
+    }
+  });
+
+  it("withdraw без карточки — ошибка", async () => {
+    const [userCCardPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_card"), vaultStatePda.toBuffer(), userC.publicKey.toBuffer()],
+      program.programId
+    );
+
+    try {
+      await program.methods
+        .withdraw(new anchor.BN(10))
+        .accounts({
+          user: userC.publicKey,
+          vaultState: vaultStatePda,
+          userCard: userCCardPda,
+          userTokenAccount: userCTokenAccount,
+          vaultTokenAccount: vaultTokenAccountPda,
+          shareMint: shareMintPda,
+          userShareAccount: userCShareAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([userC])
+        .rpc();
+      assert.fail("Ожидалась ошибка withdraw без карточки");
+    } catch (err: any) {
+      expect(err).to.exist;
+      const errMsg = err.toString();
+      const isUninitialized =
+        errMsg.includes("AccountNotInitialized") ||
+        errMsg.includes("has not been initialized") ||
+        errMsg.includes("3012");
+      expect(isUninitialized).to.be.true;
+    }
+  });
+
+  it("withdraw больше своих shares — ошибка", async () => {
+    const [userACardPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_card"), vaultStatePda.toBuffer(), userA.publicKey.toBuffer()],
+      program.programId
+    );
+
+    // У userA сейчас 100 shares. Пытаемся вывести 200.
+    try {
+      await program.methods
+        .withdraw(new anchor.BN(200))
+        .accounts({
+          user: userA.publicKey,
+          vaultState: vaultStatePda,
+          userCard: userACardPda,
+          userTokenAccount: userATokenAccount,
+          vaultTokenAccount: vaultTokenAccountPda,
+          shareMint: shareMintPda,
+          userShareAccount: userAShareAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([userA])
+        .rpc();
+      assert.fail("Ожидалась ошибка при выводе больше своих shares");
+    } catch (err: any) {
+      expect(err).to.exist;
+      const errMsg = err.toString();
+      // Ошибка burn из SPL Token: insufficient funds или custom program error
+      const isInsufficientFunds =
+        errMsg.includes("insufficient funds") ||
+        errMsg.includes("insufficient") ||
+        errMsg.includes("0x1") ||
+        errMsg.includes("InsufficientCardShares");
+      expect(isInsufficientFunds).to.be.true;
+    }
+  });
+
+  it("A возвращает 50 shares из 150/150 -> получает 50 токенов, в vault 100/100", async () => {
+    const [userACardPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_card"), vaultStatePda.toBuffer(), userA.publicKey.toBuffer()],
+      program.programId
+    );
+
+    const tokenBalanceBefore = (
+      await getAccount(provider.connection, userATokenAccount)
+    ).amount;
+
+    await program.methods
+      .withdraw(new anchor.BN(50))
+      .accounts({
+        user: userA.publicKey,
+        vaultState: vaultStatePda,
+        userCard: userACardPda,
+        userTokenAccount: userATokenAccount,
+        vaultTokenAccount: vaultTokenAccountPda,
+        shareMint: shareMintPda,
+        userShareAccount: userAShareAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([userA])
+      .rpc();
+
+    // Проверяем состояние хранилища: 100 токенов и 100 shares
+    const vaultAccount = await program.account.vaultState.fetch(vaultStatePda);
+    expect(vaultAccount.totalTokens.toNumber()).to.equal(100);
+    expect(vaultAccount.totalShares.toNumber()).to.equal(100);
+
+    // Проверяем карточку пользователя A
+    const cardA = await program.account.userCard.fetch(userACardPda);
+    expect(cardA.shares.toNumber()).to.equal(50);
+    expect(cardA.deposited.toNumber()).to.equal(50);
+
+    // Проверяем баланс токенов пользователя A (получил +50 токенов)
+    const tokenBalanceAfter = (
+      await getAccount(provider.connection, userATokenAccount)
+    ).amount;
+    expect(Number(tokenBalanceAfter - tokenBalanceBefore)).to.equal(50);
+
+    // Проверяем share-аккаунт пользователя A (осталось 50 shares)
+    const shareAccountA = await getAccount(provider.connection, userAShareAccount);
+    expect(Number(shareAccountA.amount)).to.equal(50);
+
+    // Проверяем vault_token_account (осталось 100)
+    const vaultTokenAccount = await getAccount(
+      provider.connection,
+      vaultTokenAccountPda
+    );
+    expect(Number(vaultTokenAccount.amount)).to.equal(100);
+  });
+
+  it("B выводит всё -> shares сожжены, токены возвращены", async () => {
+    const [userBCardPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_card"), vaultStatePda.toBuffer(), userB.publicKey.toBuffer()],
+      program.programId
+    );
+
+    const tokenBalanceBefore = (
+      await getAccount(provider.connection, userBTokenAccount)
+    ).amount;
+
+    // У userB 50 shares
+    await program.methods
+      .withdraw(new anchor.BN(50))
+      .accounts({
+        user: userB.publicKey,
+        vaultState: vaultStatePda,
+        userCard: userBCardPda,
+        userTokenAccount: userBTokenAccount,
+        vaultTokenAccount: vaultTokenAccountPda,
+        shareMint: shareMintPda,
+        userShareAccount: userBShareAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([userB])
+      .rpc();
+
+    // Карточка B: 0 shares, 0 deposited
+    const cardB = await program.account.userCard.fetch(userBCardPda);
+    expect(cardB.shares.toNumber()).to.equal(0);
+    expect(cardB.deposited.toNumber()).to.equal(0);
+
+    // Share-токены B сожжены полностью
+    const shareAccountB = await getAccount(provider.connection, userBShareAccount);
+    expect(Number(shareAccountB.amount)).to.equal(0);
+
+    // Токены возвращены (получил 50 токенов)
+    const tokenBalanceAfter = (
+      await getAccount(provider.connection, userBTokenAccount)
+    ).amount;
+    expect(Number(tokenBalanceAfter - tokenBalanceBefore)).to.equal(50);
+
+    // В vault осталось 50 токенов и 50 shares (пользователя A)
+    const vaultAccount = await program.account.vaultState.fetch(vaultStatePda);
+    expect(vaultAccount.totalTokens.toNumber()).to.equal(50);
+    expect(vaultAccount.totalShares.toNumber()).to.equal(50);
+  });
 });
