@@ -10,6 +10,9 @@ pub struct VaultState {
     pub total_tokens: u64,
     pub total_shares: u64,
     pub bump: u8,
+    pub in_market: bool,
+    pub token_mint_b: Pubkey,
+    pub vault_token_account_b: Pubkey,
 }
 
 #[account]

@@ -52,5 +52,8 @@ pub fn handler(ctx: Context<InitializeVault>) -> Result<()> {
     vault_state.total_tokens = 0;
     vault_state.total_shares = 0;
     vault_state.bump = ctx.bumps.vault_state;
+    vault_state.in_market = false;
+    vault_state.token_mint_b = Pubkey::default();
+    vault_state.vault_token_account_b = Pubkey::default();
     Ok(())
 }

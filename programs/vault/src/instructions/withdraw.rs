@@ -75,6 +75,8 @@ pub struct Withdraw<'info> {
 }
 
 pub fn handler(ctx: Context<Withdraw>, shares_amount: u64) -> Result<()> {
+    require!(!ctx.accounts.vault_state.in_market, VaultError::InMarket);
+
     if shares_amount == 0 {
         return Err(VaultError::ZeroAmount.into());
     }
@@ -110,11 +112,7 @@ pub fn handler(ctx: Context<Withdraw>, shares_amount: u64) -> Result<()> {
     // Подписывает vault_state PDA через CpiContext::new_with_signer и seeds
     let token_mint_key = ctx.accounts.vault_state.token_mint;
     let bump = ctx.accounts.vault_state.bump;
-    let signer_seeds: &[&[&[u8]]] = &[&[
-        b"vault",
-        token_mint_key.as_ref(),
-        &[bump],
-    ]];
+    let signer_seeds: &[&[&[u8]]] = &[&[b"vault", token_mint_key.as_ref(), &[bump]]];
 
     let transfer_ctx = CpiContext::new_with_signer(
         ctx.accounts.token_program.to_account_info(),

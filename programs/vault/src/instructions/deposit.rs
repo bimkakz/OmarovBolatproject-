@@ -59,6 +59,8 @@ pub struct Deposit<'info> {
 }
 
 pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+    require!(!ctx.accounts.vault_state.in_market, VaultError::InMarket);
+
     if amount == 0 {
         return Err(VaultError::ZeroAmount.into());
     }
@@ -96,11 +98,7 @@ pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     // Mint share tokens to user_share_account (signed by vault_state PDA)
     let token_mint_key = ctx.accounts.vault_state.token_mint;
     let bump = ctx.accounts.vault_state.bump;
-    let signer_seeds: &[&[&[u8]]] = &[&[
-        b"vault",
-        token_mint_key.as_ref(),
-        &[bump],
-    ]];
+    let signer_seeds: &[&[&[u8]]] = &[&[b"vault", token_mint_key.as_ref(), &[bump]]];
 
     let mint_to_ctx = CpiContext::new_with_signer(
         ctx.accounts.token_program.to_account_info(),

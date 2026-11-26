@@ -14,4 +14,16 @@ pub enum VaultError {
     WithdrawTooSmall,
     #[msg("User card has insufficient shares recorded")]
     InsufficientCardShares,
+    #[msg("Only admin can perform this action")]
+    Unauthorized,
+    #[msg("Vault funds are currently in market")]
+    InMarket,
+    #[msg("Pool or pool vaults do not match vault tokens")]
+    WrongPool,
+    #[msg("Token B balance must be zero before syncing vault")]
+    TokenBNotZero,
+    #[msg("Pair token has already been added")]
+    PairTokenAlreadyAdded,
+    #[msg("Pair token has not been added yet")]
+    PairTokenNotAdded,
 }

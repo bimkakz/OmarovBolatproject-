@@ -9,6 +9,7 @@
   - `create_user_card`: создание персональной карточки пользователя (`user_card` PDA).
   - `deposit`: внесение токенов в хранилище с расчётом и выпуском share-токенов.
   - `withdraw`: вывод токенов из хранилища со сжиганием shares (CPI burn & transfer).
+- `programs/vault/src/raydium.rs`: CPI-обёртка для Raydium CLMM swap_v2 (devnet).
 - `tests/vault.ts`: полный набор тестов для контракта Vault.
 - `scripts/create-clmm-pool.ts`: скрипт создания тестовых токенов и пула ликвидности Raydium CLMM на devnet.
 
@@ -55,3 +56,23 @@ npm run create-pool
 ### 3. Что сдавать на проверку
 - Ссылку на коммит в GitHub репозитории.
 - Сгенерированный `poolId` со ссылкой на Solana Explorer (`https://explorer.solana.com/address/<poolId>?cluster=devnet`).
+
+---
+
+## Неделя 12: Vault и Raydium CLMM на devnet
+
+- Администратор один раз добавляет TOKEN_B; его vault token account использует PDA seeds `["vault_tokens_b", TOKEN_A mint]`.
+- Только администратор может добавлять пару, выполнять swaps и синхронизировать vault.
+- После swap vault помечается `in_market`; deposit и withdraw приостанавливаются до синхронизации.
+- `sync_vault` требует нулевой баланс TOKEN_B, считывает реальный баланс TOKEN_A и сбрасывает `in_market`.
+- Swap может принять `u64::MAX`, чтобы обменять весь баланс входного токена на момент исполнения. Передавайте tick arrays как remaining accounts.
+
+Devnet-интеграционные тесты создают свои токены и CLMM-пулы и требуют SOL на кошельке для rent и комиссий:
+
+```bash
+ANCHOR_PROVIDER_URL=https://api.devnet.solana.com \
+ANCHOR_WALLET=~/.config/solana/id.json \
+npx ts-mocha -p ./tsconfig.json -t 600000 tests/raydium.ts
+```
+
+Для возврата vault в доступное состояние клиент должен отправить `swap(u64::MAX, minOut, false)` с `sync_vault` в `.postInstructions([syncIx])`.
