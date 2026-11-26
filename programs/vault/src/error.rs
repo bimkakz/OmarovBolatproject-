@@ -26,4 +26,10 @@ pub enum VaultError {
     PairTokenAlreadyAdded,
     #[msg("Pair token has not been added yet")]
     PairTokenNotAdded,
+    #[msg("A position is already open for this vault")]
+    PositionAlreadyOpen,
+    #[msg("The vault does not own this open position")]
+    NoOpenPosition,
+    #[msg("Close the open position before syncing the vault")]
+    PositionOpen,
 }

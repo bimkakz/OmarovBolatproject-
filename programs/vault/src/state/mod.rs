@@ -13,6 +13,9 @@ pub struct VaultState {
     pub in_market: bool,
     pub token_mint_b: Pubkey,
     pub vault_token_account_b: Pubkey,
+    pub position_open: bool,
+    pub position_nft_mint: Pubkey,
+    pub personal_position: Pubkey,
 }
 
 #[account]

@@ -24,6 +24,10 @@ pub struct SyncVault<'info> {
 
 pub fn handler(ctx: Context<SyncVault>) -> Result<()> {
     require!(
+        !ctx.accounts.vault_state.position_open,
+        VaultError::PositionOpen
+    );
+    require!(
         ctx.accounts.vault_token_account_b.amount == 0,
         VaultError::TokenBNotZero
     );

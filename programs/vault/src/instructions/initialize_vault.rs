@@ -55,5 +55,8 @@ pub fn handler(ctx: Context<InitializeVault>) -> Result<()> {
     vault_state.in_market = false;
     vault_state.token_mint_b = Pubkey::default();
     vault_state.vault_token_account_b = Pubkey::default();
+    vault_state.position_open = false;
+    vault_state.position_nft_mint = Pubkey::default();
+    vault_state.personal_position = Pubkey::default();
     Ok(())
 }
