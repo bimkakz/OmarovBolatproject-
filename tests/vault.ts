@@ -2,7 +2,10 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { Vault } from "../target/types/vault";
 import {
+  createAccount,
   createMint,
+  mintTo,
+  getAccount,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { assert, expect } from "chai";
@@ -21,28 +24,30 @@ describe("vault", () => {
   let vaultTokenAccountPda: PublicKey;
   let shareMintPda: PublicKey;
 
-  const user1 = Keypair.generate();
-  const user2 = Keypair.generate();
+  const userA = Keypair.generate();
+  const userB = Keypair.generate();
+  const userC = Keypair.generate(); // without card
+
+  let userATokenAccount: PublicKey;
+  let userAShareAccount: PublicKey;
+  let userBTokenAccount: PublicKey;
+  let userBShareAccount: PublicKey;
+  let userCTokenAccount: PublicKey;
+  let userCShareAccount: PublicKey;
 
   before(async () => {
     // Airdrop SOL to test users
-    const airdrop1 = await provider.connection.requestAirdrop(
-      user1.publicKey,
-      2 * anchor.web3.LAMPORTS_PER_SOL
-    );
-    const airdrop2 = await provider.connection.requestAirdrop(
-      user2.publicKey,
-      2 * anchor.web3.LAMPORTS_PER_SOL
-    );
-    const latestBlockhash = await provider.connection.getLatestBlockhash();
-    await provider.connection.confirmTransaction({
-      signature: airdrop1,
-      ...latestBlockhash,
-    });
-    await provider.connection.confirmTransaction({
-      signature: airdrop2,
-      ...latestBlockhash,
-    });
+    for (const user of [userA, userB, userC]) {
+      const airdrop = await provider.connection.requestAirdrop(
+        user.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      const latestBlockhash = await provider.connection.getLatestBlockhash();
+      await provider.connection.confirmTransaction({
+        signature: airdrop,
+        ...latestBlockhash,
+      });
+    }
 
     // Create token mint
     tokenMint = await createMint(
@@ -94,64 +99,130 @@ describe("vault", () => {
     expect(vaultAccount.totalTokens.toNumber()).to.equal(0);
     expect(vaultAccount.totalShares.toNumber()).to.equal(0);
     expect(vaultAccount.bump).to.equal(vaultBump);
+
+    // Create token accounts and share accounts for users using createAccount from @solana/spl-token
+    userATokenAccount = await createAccount(
+      provider.connection,
+      (provider.wallet as any).payer,
+      tokenMint,
+      userA.publicKey
+    );
+    userAShareAccount = await createAccount(
+      provider.connection,
+      (provider.wallet as any).payer,
+      shareMintPda,
+      userA.publicKey
+    );
+
+    userBTokenAccount = await createAccount(
+      provider.connection,
+      (provider.wallet as any).payer,
+      tokenMint,
+      userB.publicKey
+    );
+    userBShareAccount = await createAccount(
+      provider.connection,
+      (provider.wallet as any).payer,
+      shareMintPda,
+      userB.publicKey
+    );
+
+    userCTokenAccount = await createAccount(
+      provider.connection,
+      (provider.wallet as any).payer,
+      tokenMint,
+      userC.publicKey
+    );
+    userCShareAccount = await createAccount(
+      provider.connection,
+      (provider.wallet as any).payer,
+      shareMintPda,
+      userC.publicKey
+    );
+
+    // Mint initial tokens to users
+    await mintTo(
+      provider.connection,
+      (provider.wallet as any).payer,
+      tokenMint,
+      userATokenAccount,
+      admin.publicKey,
+      1000
+    );
+    await mintTo(
+      provider.connection,
+      (provider.wallet as any).payer,
+      tokenMint,
+      userBTokenAccount,
+      admin.publicKey,
+      1000
+    );
+    await mintTo(
+      provider.connection,
+      (provider.wallet as any).payer,
+      tokenMint,
+      userCTokenAccount,
+      admin.publicKey,
+      1000
+    );
   });
 
   it("create_user_card: у каждого пользователя своя карточка", async () => {
-    const [user1CardPda, user1Bump] = PublicKey.findProgramAddressSync(
-      [Buffer.from("user_card"), vaultStatePda.toBuffer(), user1.publicKey.toBuffer()],
+    const [userACardPda, userABump] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_card"), vaultStatePda.toBuffer(), userA.publicKey.toBuffer()],
       program.programId
     );
 
-    const [user2CardPda, user2Bump] = PublicKey.findProgramAddressSync(
-      [Buffer.from("user_card"), vaultStatePda.toBuffer(), user2.publicKey.toBuffer()],
+    const [userBCardPda, userBBump] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_card"), vaultStatePda.toBuffer(), userB.publicKey.toBuffer()],
       program.programId
     );
 
-    // User 1 creates card
+    // User A creates card
     await program.methods
       .createUserCard()
       .accounts({
-        user: user1.publicKey,
+        user: userA.publicKey,
         vaultState: vaultStatePda,
-        userCard: user1CardPda,
+        userCard: userACardPda,
         systemProgram: SystemProgram.programId,
       })
-      .signers([user1])
+      .signers([userA])
       .rpc();
 
-    // User 2 creates card
+    // User B creates card
     await program.methods
       .createUserCard()
       .accounts({
-        user: user2.publicKey,
+        user: userB.publicKey,
         vaultState: vaultStatePda,
-        userCard: user2CardPda,
+        userCard: userBCardPda,
         systemProgram: SystemProgram.programId,
       })
-      .signers([user2])
+      .signers([userB])
       .rpc();
 
-    const card1 = await program.account.userCard.fetch(user1CardPda);
-    const card2 = await program.account.userCard.fetch(user2CardPda);
+    const cardA = await program.account.userCard.fetch(userACardPda);
+    const cardB = await program.account.userCard.fetch(userBCardPda);
 
-    expect(card1.vault.toBase58()).to.equal(vaultStatePda.toBase58());
-    expect(card1.owner.toBase58()).to.equal(user1.publicKey.toBase58());
-    expect(card1.deposited.toNumber()).to.equal(0);
-    expect(card1.shares.toNumber()).to.equal(0);
-    expect(card1.bump).to.equal(user1Bump);
+    expect(cardA.vault.toBase58()).to.equal(vaultStatePda.toBase58());
+    expect(cardA.owner.toBase58()).to.equal(userA.publicKey.toBase58());
+    expect(cardA.deposited.toNumber()).to.equal(0);
+    expect(cardA.shares.toNumber()).to.equal(0);
+    expect(cardA.bump).to.equal(userABump);
 
-    expect(card2.vault.toBase58()).to.equal(vaultStatePda.toBase58());
-    expect(card2.owner.toBase58()).to.equal(user2.publicKey.toBase58());
-    expect(card2.deposited.toNumber()).to.equal(0);
-    expect(card2.shares.toNumber()).to.equal(0);
-    expect(card2.bump).to.equal(user2Bump);
+    expect(cardB.vault.toBase58()).to.equal(vaultStatePda.toBase58());
+    expect(cardB.owner.toBase58()).to.equal(userB.publicKey.toBase58());
+    expect(cardB.deposited.toNumber()).to.equal(0);
+    expect(cardB.shares.toNumber()).to.equal(0);
+    expect(cardB.bump).to.equal(userBBump);
 
-    expect(user1CardPda.toBase58()).to.not.equal(user2CardPda.toBase58());
+    expect(userACardPda.toBase58()).to.not.equal(userBCardPda.toBase58());
   });
 
   it("create_user_card: вторая карточка для того же пользователя — ошибка", async () => {
-    const [user1CardPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("user_card"), vaultStatePda.toBuffer(), user1.publicKey.toBuffer()],
+    const [userACardPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_card"), vaultStatePda.toBuffer(), userA.publicKey.toBuffer()],
       program.programId
     );
 
@@ -159,16 +230,15 @@ describe("vault", () => {
       await program.methods
         .createUserCard()
         .accounts({
-          user: user1.publicKey,
+          user: userA.publicKey,
           vaultState: vaultStatePda,
-          userCard: user1CardPda,
+          userCard: userACardPda,
           systemProgram: SystemProgram.programId,
         })
-        .signers([user1])
+        .signers([userA])
         .rpc();
       assert.fail("Ожидалась ошибка при повторном создании карточки пользователя");
     } catch (err: any) {
-      // Ожидаем ошибку 'account already in use' или anchor error 0x0
       expect(err).to.exist;
       const errMsg = err.toString();
       const isAlreadyInUse =
@@ -177,5 +247,145 @@ describe("vault", () => {
         errMsg.includes("0x0");
       expect(isAlreadyInUse).to.be.true;
     }
+  });
+
+  it("deposit с суммой 0 — ошибка", async () => {
+    const [userACardPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_card"), vaultStatePda.toBuffer(), userA.publicKey.toBuffer()],
+      program.programId
+    );
+
+    try {
+      await program.methods
+        .deposit(new anchor.BN(0))
+        .accounts({
+          user: userA.publicKey,
+          vaultState: vaultStatePda,
+          userCard: userACardPda,
+          userTokenAccount: userATokenAccount,
+          vaultTokenAccount: vaultTokenAccountPda,
+          shareMint: shareMintPda,
+          userShareAccount: userAShareAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([userA])
+        .rpc();
+      assert.fail("Ожидалась ошибка ZeroAmount при сумме 0");
+    } catch (err: any) {
+      expect(err).to.exist;
+      expect(err.toString()).to.include("ZeroAmount");
+    }
+  });
+
+  it("deposit без карточки — ошибка", async () => {
+    // User C has no user_card PDA initialized
+    const [userCCardPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_card"), vaultStatePda.toBuffer(), userC.publicKey.toBuffer()],
+      program.programId
+    );
+
+    try {
+      await program.methods
+        .deposit(new anchor.BN(100))
+        .accounts({
+          user: userC.publicKey,
+          vaultState: vaultStatePda,
+          userCard: userCCardPda,
+          userTokenAccount: userCTokenAccount,
+          vaultTokenAccount: vaultTokenAccountPda,
+          shareMint: shareMintPda,
+          userShareAccount: userCShareAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([userC])
+        .rpc();
+      assert.fail("Ожидалась ошибка депозита без карточки");
+    } catch (err: any) {
+      expect(err).to.exist;
+      const errMsg = err.toString();
+      const isUninitialized =
+        errMsg.includes("AccountNotInitialized") ||
+        errMsg.includes("has not been initialized") ||
+        errMsg.includes("3012");
+      expect(isUninitialized).to.be.true;
+    }
+  });
+
+  it("A вносит 100 токенов -> 100 shares", async () => {
+    const [userACardPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_card"), vaultStatePda.toBuffer(), userA.publicKey.toBuffer()],
+      program.programId
+    );
+
+    await program.methods
+      .deposit(new anchor.BN(100))
+      .accounts({
+        user: userA.publicKey,
+        vaultState: vaultStatePda,
+        userCard: userACardPda,
+        userTokenAccount: userATokenAccount,
+        vaultTokenAccount: vaultTokenAccountPda,
+        shareMint: shareMintPda,
+        userShareAccount: userAShareAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([userA])
+      .rpc();
+
+    const vaultAccount = await program.account.vaultState.fetch(vaultStatePda);
+    expect(vaultAccount.totalTokens.toNumber()).to.equal(100);
+    expect(vaultAccount.totalShares.toNumber()).to.equal(100);
+
+    const cardA = await program.account.userCard.fetch(userACardPda);
+    expect(cardA.deposited.toNumber()).to.equal(100);
+    expect(cardA.shares.toNumber()).to.equal(100);
+
+    const shareAccountA = await getAccount(provider.connection, userAShareAccount);
+    expect(Number(shareAccountA.amount)).to.equal(100);
+
+    const vaultTokenAccount = await getAccount(
+      provider.connection,
+      vaultTokenAccountPda
+    );
+    expect(Number(vaultTokenAccount.amount)).to.equal(100);
+  });
+
+  it("B вносит 50 -> 50 shares (в vault 150 токенов и 150 shares)", async () => {
+    const [userBCardPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_card"), vaultStatePda.toBuffer(), userB.publicKey.toBuffer()],
+      program.programId
+    );
+
+    await program.methods
+      .deposit(new anchor.BN(50))
+      .accounts({
+        user: userB.publicKey,
+        vaultState: vaultStatePda,
+        userCard: userBCardPda,
+        userTokenAccount: userBTokenAccount,
+        vaultTokenAccount: vaultTokenAccountPda,
+        shareMint: shareMintPda,
+        userShareAccount: userBShareAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([userB])
+      .rpc();
+
+    const vaultAccount = await program.account.vaultState.fetch(vaultStatePda);
+    expect(vaultAccount.totalTokens.toNumber()).to.equal(150);
+    expect(vaultAccount.totalShares.toNumber()).to.equal(150);
+
+    const cardB = await program.account.userCard.fetch(userBCardPda);
+    expect(cardB.deposited.toNumber()).to.equal(50);
+    expect(cardB.shares.toNumber()).to.equal(50);
+
+    const shareAccountB = await getAccount(provider.connection, userBShareAccount);
+    expect(Number(shareAccountB.amount)).to.equal(50);
+
+    const vaultTokenAccount = await getAccount(
+      provider.connection,
+      vaultTokenAccountPda
+    );
+    expect(Number(vaultTokenAccount.amount)).to.equal(150);
   });
 });

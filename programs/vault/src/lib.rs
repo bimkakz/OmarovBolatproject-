@@ -6,6 +6,7 @@ pub mod state;
 use anchor_lang::prelude::*;
 
 pub use constants::*;
+pub use error::*;
 pub use instructions::*;
 pub use state::*;
 
@@ -21,5 +22,9 @@ pub mod vault {
 
     pub fn create_user_card(ctx: Context<CreateUserCard>) -> Result<()> {
         instructions::create_user_card::handler(ctx)
+    }
+
+    pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+        instructions::deposit::handler(ctx, amount)
     }
 }
