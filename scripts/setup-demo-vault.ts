@@ -9,6 +9,17 @@ import { getDevnetProvider } from "./devnet";
 async function main(): Promise<void> {
   const { connection, admin, provider } = await getDevnetProvider();
   const program = new Program(idl as Idl, provider);
+  const deployedProgram = await connection.getAccountInfo(
+    program.programId,
+    "confirmed"
+  );
+  if (!deployedProgram?.executable) {
+    throw new Error(
+      `Программа ${program.programId.toBase58()} не задеплоена в devnet. ` +
+        "Сначала выполните yarn deploy-devnet; TOKEN_A ещё не создавался."
+    );
+  }
+
   const tokenMint = await createMint(
     connection,
     admin,

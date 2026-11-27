@@ -87,11 +87,12 @@ pub fn handler(ctx: Context<Withdraw>, shares_amount: u64) -> Result<()> {
     }
 
     // tokens = shares_amount * total_tokens / total_shares
-    let tokens = (shares_amount as u128)
+    let tokens_u128 = (shares_amount as u128)
         .checked_mul(vault_state.total_tokens as u128)
         .ok_or(VaultError::MathOverflow)?
         .checked_div(vault_state.total_shares as u128)
-        .ok_or(VaultError::MathOverflow)? as u64;
+        .ok_or(VaultError::MathOverflow)?;
+    let tokens = u64::try_from(tokens_u128).map_err(|_| VaultError::MathOverflow)?;
 
     if tokens == 0 {
         return Err(VaultError::WithdrawTooSmall.into());
@@ -138,10 +139,7 @@ pub fn handler(ctx: Context<Withdraw>, shares_amount: u64) -> Result<()> {
 
     // 4. Обновить поля карточки (deposited и shares)
     let user_card = &mut ctx.accounts.user_card;
-    user_card.shares = user_card
-        .shares
-        .checked_sub(shares_amount)
-        .ok_or(VaultError::InsufficientCardShares)?;
+    user_card.shares = user_card.shares.saturating_sub(shares_amount);
     // deposited уменьшаем пропорционально выведенным токенам (не ниже 0)
     user_card.deposited = user_card.deposited.saturating_sub(tokens);
 

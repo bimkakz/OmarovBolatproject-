@@ -4,6 +4,7 @@
     "create-pool": "ts-node --transpile-only scripts/create-clmm-pool.ts",
     "setup-demo": "ts-node --transpile-only scripts/setup-demo-vault.ts",
     "faucet": "ts-node --transpile-only scripts/faucet.ts",
+    "deploy-devnet": "anchor build && anchor deploy --provider.cluster devnet",
     "sync-idl": "node scripts/sync-idl.cjs",
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check"

@@ -1,4 +1,3 @@
-pub mod constants;
 pub mod error;
 pub mod instructions;
 pub mod raydium;
@@ -6,7 +5,6 @@ pub mod state;
 
 use anchor_lang::prelude::*;
 
-pub use constants::*;
 pub use error::*;
 pub use instructions::*;
 pub(crate) use raydium::{

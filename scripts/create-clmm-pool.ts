@@ -1,7 +1,6 @@
-import fs from "fs";
 import path from "path";
-import os from "os";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import fs from "fs";
+import { PublicKey } from "@solana/web3.js";
 import {
   createMint,
   getOrCreateAssociatedTokenAccount,
@@ -10,29 +9,15 @@ import {
 } from "@solana/spl-token";
 import { Raydium, DEVNET_PROGRAM_ID } from "@raydium-io/raydium-sdk-v2";
 import Decimal from "decimal.js";
+import { getDevnetProvider } from "./devnet";
 
 // Raydium CLMM program ID on devnet
 const RAYDIUM_CLMM_DEVNET_PROGRAM_ID = new PublicKey(
   "DRayAUgENGQBKVaX8owNhgzkEDyoHTGVEGHVJT1E9pfH"
 );
 
-function getWalletKeypair(): Keypair {
-  const walletPath =
-    process.env.ANCHOR_WALLET || path.join(os.homedir(), ".config", "solana", "id.json");
-
-  if (!fs.existsSync(walletPath)) {
-    throw new Error(`Кошелёк не найден по пути: ${walletPath}`);
-  }
-
-  const raw = fs.readFileSync(walletPath, "utf-8");
-  const secretKey = Uint8Array.from(JSON.parse(raw));
-  return Keypair.fromSecretKey(secretKey);
-}
-
 async function main() {
-  const rpcUrl = process.env.DEVNET_RPC || "https://api.devnet.solana.com";
-  const connection = new Connection(rpcUrl, "confirmed");
-  const payer = getWalletKeypair();
+  const { connection, admin: payer } = await getDevnetProvider();
 
   // [1/3] Создаю тестовые токены...
   console.log("[1/3] Создаю тестовые токены...");

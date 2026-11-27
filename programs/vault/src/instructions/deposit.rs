@@ -68,16 +68,17 @@ pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     let vault_state = &ctx.accounts.vault_state;
 
     // Calculate shares:
-    // First deposit (total_shares == 0): shares = amount (1:1)
+    // First deposit (total_shares == 0 or total_tokens == 0): shares = amount (1:1)
     // Later: shares = amount * total_shares / total_tokens
-    let shares = if vault_state.total_shares == 0 {
+    let shares = if vault_state.total_shares == 0 || vault_state.total_tokens == 0 {
         amount
     } else {
-        (amount as u128)
+        let shares_u128 = (amount as u128)
             .checked_mul(vault_state.total_shares as u128)
             .ok_or(VaultError::MathOverflow)?
             .checked_div(vault_state.total_tokens as u128)
-            .ok_or(VaultError::MathOverflow)? as u64
+            .ok_or(VaultError::MathOverflow)?;
+        u64::try_from(shares_u128).map_err(|_| VaultError::MathOverflow)?
     };
 
     if shares == 0 {
